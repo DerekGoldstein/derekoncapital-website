@@ -10,9 +10,14 @@ This is a static site — plain HTML/CSS/JS, no build step, no framework. Same d
 
 ```
 derekoncapital-website/
-├── index.html      ← the page
+├── index.html      ← home page
+├── blog/
+│   └── index.html  ← /blog/ hub — cards linking out to Substack articles
 ├── styles.css      ← all styles (mobile-first, brand palette)
 ├── script.js       ← tiny script (just sets the footer year)
+├── .htaccess       ← forces HTTPS + security headers + caching (Apache / IONOS)
+├── robots.txt      ← lets crawlers in, points them at the sitemap
+├── sitemap.xml     ← list of on-domain URLs for Google
 ├── logo.png        ← circular DC logo (hero)
 ├── favicon.png     ← square dark navy DC app icon
 ├── banner.png      ← horizontal banner (currently unused — kept for future OG image / Substack header use)
@@ -50,10 +55,46 @@ You don't need npm install or any dependencies — the site references Google Fo
 1. Log into IONOS, open the **derekoncapital.com** hosting package.
 2. Open the **File Manager** (or use SFTP — your call).
 3. Navigate to the web root (usually a folder like `/` or `/htdocs` — same place where the Sea King sites live).
-4. **Upload the entire contents of this folder** — `index.html`, `styles.css`, `script.js`, `logo.png`, `favicon.png`, `banner.png`. Do *not* upload the folder itself; upload the files inside it. Don't upload `README.md` (no harm if you do, just unnecessary).
-5. Visit https://derekoncapital.com/ to confirm it's live. Hard-refresh (Ctrl+Shift+R) if the old cached version shows.
+4. **Upload the entire contents of this folder** — `index.html`, `styles.css`, `script.js`, `logo.png`, `favicon.png`, `banner.png`, `robots.txt`, `sitemap.xml`, and the hidden `.htaccess`. Do *not* upload the folder itself; upload the files inside it. Don't upload `README.md` or the `.claude/` folder (no harm, just unnecessary).
+5. **Recreate the `blog/` folder** in the web root and upload `blog/index.html` into it. (File Manager: create a new folder named `blog`, open it, upload the file.)
+6. Visit https://derekoncapital.com/ and https://derekoncapital.com/blog/ to confirm both are live. Hard-refresh (Ctrl+Shift+R) if an old cached version shows.
 
 That's it. No SSR, no CI/CD, no Node runtime needed on the server.
+
+> **Heads up — `.htaccess` is a hidden file.** The IONOS File Manager hides dotfiles by default. Turn on **Settings → Show hidden files** (or the eye/“show hidden” toggle) before uploading, or it'll look like the upload silently skipped it. If you use SFTP, make sure your client shows hidden files too. Without `.htaccess`, HTTP won't redirect to HTTPS.
+
+---
+
+## HTTPS / SSL — free, the IONOS way
+
+**Short version:** On IONOS *managed web hosting* you don't install Let's Encrypt yourself. There's no shell, so you can't run `certbot`. Instead, IONOS bundles a **free SSL certificate** with the hosting plan (their free tier is Let's Encrypt-issued under the hood) — you just turn it on in the control panel. Same outcome: free, auto-renewing HTTPS. The `.htaccess` in this repo is what *forces* every visitor onto that HTTPS once the cert is active.
+
+### Step 1 — Turn on the free certificate (one time, ~2 min in the panel)
+
+1. Log into IONOS → **Hosting** (or **Websites & Stores**) → the **derekoncapital.com** package.
+2. Open **SSL Certificates** (sometimes under *Security* or *Manage SSL*).
+3. Find the free **SSL Starter** certificate and **assign it to derekoncapital.com** (and `www.derekoncapital.com`). If one isn't already created, click **Create / Activate** — it's free with the plan.
+4. Wait for status to go **Active** (a few minutes up to a couple of hours while DNS validates). IONOS auto-renews it; you never touch it again.
+
+> If you don't see a free option and IONOS tries to *sell* you one: the free cert is real, but it's sometimes buried. It only appears for domains pointed at this hosting package. Make sure derekoncapital.com's DNS is on this IONOS package first. If it's genuinely missing, IONOS support can switch on the free "SSL Starter."
+
+### Step 2 — Force HTTPS (already handled by `.htaccess`)
+
+Once the cert is Active, the included `.htaccess` does the rest:
+- Redirects `http://` → `https://` (301).
+- Redirects `www.derekoncapital.com` → `derekoncapital.com` (one canonical host — better for SEO).
+- Sends an **HSTS** header so browsers refuse plain HTTP for a year.
+- Adds a few sensible security headers + gzip + caching.
+
+It's written for IONOS specifically: IONOS terminates SSL at its load balancer, so the redirect checks the `X-Forwarded-Proto` header (not just `%{HTTPS}`) to avoid an infinite redirect loop. Don't "simplify" that rule.
+
+### Step 3 — Verify
+
+- Visit `http://derekoncapital.com` → it should bounce to `https://derekoncapital.com`.
+- Click the padlock in the browser → certificate should be valid.
+- Optional: run the domain through https://www.ssllabs.com/ssltest/ for an A rating.
+
+> **If you're NOT on managed hosting** (e.g. an IONOS VPS / Cloud Server with SSH): then you *can* run Let's Encrypt directly. Install certbot and run `sudo certbot --apache -d derekoncapital.com -d www.derekoncapital.com` (or `--nginx`). It auto-edits your vhost and sets up renewal. But for this static site on standard hosting, Step 1 above is the path.
 
 ---
 
@@ -86,7 +127,7 @@ Both loaded from Google Fonts.
 
 **Add a new social channel:** copy one of the existing `<li>` blocks in `.link-stack`, swap the SVG icon, name, handle, and href. The order matters — top of the list = highest editorial priority.
 
-**Update the about copy:** edit the two `<p class="about-copy">` paragraphs in the `<!-- ─────────── ABOUT ─────────── -->` section.
+**Update the page copy:** the live home page is short by design. The main strings are: the big headline in `<h2 class="cta-title">` (top section), the "Follow along" blurb in `<p class="section-desc">` inside `<!-- FOLLOW / LINKTREE -->`, and the businesses blurb in the `<p class="section-desc">` inside `<!-- BUSINESSES -->`. Edit those directly in `index.html`.
 
 **Hook up analytics:** there's a placeholder comment in `index.html`'s `<head>`:
 ```html
@@ -96,7 +137,57 @@ Replace it with the GA4 or Plausible snippet when you're ready. No other changes
 
 **Change the favicon or logo:** replace `logo.png` and/or `favicon.png` in this folder with files of the same name. The HTML already references them by filename.
 
-**Change the Calendly URL:** search `index.html` for `calendly.com/derek-seakingcapital/intro-call` — appears in two places (hero CTA and the mid-page CTA section). Update both.
+**Change the Calendly URL:** search `index.html` for `calendly.com/derek-seakingcapital/intro-call` — appears once, on the "Book a free intro call" button in the top CTA section.
+
+**Edit the header nav:** the nav lives in `<header class="site-header">` near the top of both `index.html` and `blog/index.html`. The two links are **Home** (`/`) and **Field Notes** (`/blog/`). Whichever link matches the current page gets `aria-current="page"` (which styles it bronze).
+
+---
+
+## The blog — adding a post
+
+The blog lives at **`/blog/`** (`blog/index.html`). It's a hub that lists your Substack articles as cards; clicking a card opens the full article **on Substack** (opens in a new tab). This was the chosen approach: near-zero upkeep, and it's what unlocks Google Publisher Center via your Substack RSS feed. (Trade-off: Google gives the *article's* ranking credit to Substack, not derekoncapital.com. See the SEO section for the upgrade path if you ever want that credit on your own domain.)
+
+**To add a new article**, edit `blog/index.html` and do three small things:
+
+1. **Add the card.** Copy one `<li>` block inside `.post-list`, paste it at the **top** (newest first), and update four things:
+   - the `href` → the Substack post URL
+   - the `<time>` → both `datetime="YYYY-MM-DD"` and the visible date (e.g. `June 3, 2026`)
+   - the `<h2 class="post-title">` → the article title
+   - the `<p class="post-excerpt">` → one-line summary (the Substack subtitle works great)
+   - (also update the `aria-label` on the link so screen readers announce the right title)
+2. **Add it to the structured data.** In the `<head>`, find the `"blogPost"` array in the JSON-LD block and add a matching `BlogPosting` entry (headline, url, datePublished, description). This is what tells Google it's an article.
+3. **Bump the sitemap.** In `sitemap.xml`, update the `<lastmod>` on the `/blog/` URL to today's date so Google re-crawls sooner.
+
+That's it — re-upload `blog/index.html` and `sitemap.xml`. No build step.
+
+> The two posts currently listed were pulled from your live feed (`derekoncapital.substack.com/feed`). They'll need to be added by hand as you publish — there's intentionally no JavaScript fetching the feed at runtime (keeps the page fast, crawlable, and dependency-free).
+
+---
+
+## SEO & Google Publisher Center
+
+What's now wired up for search:
+
+- **`robots.txt`** — lets all crawlers in, points to the sitemap.
+- **`sitemap.xml`** — lists the on-domain pages (`/` and `/blog/`). Substack posts aren't in here; Google gets those from the RSS feed instead.
+- **Canonical tags** on both pages (prevents duplicate-URL confusion).
+- **JSON-LD structured data** — a `Person` + `WebSite` graph on the home page (feeds Google's knowledge panel and ties together all your social profiles via `sameAs`), and a `Blog` + `BlogPosting` list on `/blog/`.
+- **Open Graph + Twitter cards** with absolute image URLs (so link previews render on LinkedIn/X/iMessage).
+- **RSS discovery** `<link>` in both `<head>`s pointing at the Substack feed.
+
+### Turn it on in Google (do these once)
+
+1. **Google Search Console** — add **derekoncapital.com** as a *Domain* property and verify (IONOS lets you add the TXT record they give you in the DNS panel). Then **Sitemaps → submit** `https://derekoncapital.com/sitemap.xml`. This is the single highest-leverage SEO step — it's how Google discovers and indexes the site.
+2. **Google Publisher Center** (https://publishercenter.google.com) — create a publication "Derek On Capital", add **derekoncapital.com** as the website, verify ownership (it reuses Search Console verification), then add your **Substack RSS feed** as a content source:
+   ```
+   https://derekoncapital.substack.com/feed
+   ```
+   That feed is already valid and auto-updates every time you publish — nothing to maintain.
+3. Sanity-check the structured data with the **Rich Results Test** (https://search.google.com/test/rich-results) — paste `https://derekoncapital.com/` and `https://derekoncapital.com/blog/`.
+
+### If you later want the SEO credit on *your* domain
+
+Linking out to Substack sends ranking signals to Substack. To capture them on derekoncapital.com, the upgrade path is to **republish each post as a real page** under `/blog/<slug>/` with the full text, and set the **canonical on Substack** to point at your domain (Substack: Post → Settings → Canonical URL). More upkeep, but then the articles rank for *you*. The current structure (folder-per-page under `/blog/`) is already set up to grow that way.
 
 ---
 
@@ -106,7 +197,7 @@ A few judgment calls during the build — flagged here so you can override if yo
 
 1. **Calendly is a button-out, not embedded.** The spec called for this explicitly. Keeps the page small and avoids the Calendly script bundle on every page load.
 2. **`banner.png` is included in the folder but not referenced** in the HTML. Kept it around because it's a beautiful asset and is probably the right thing to use as a Substack banner or future Open Graph image. Right now `og:image` points to `logo.png` (the circular logo) since most preview cards crop centered — squares preview cleaner than horizontal banners on most platforms. Easy to swap if you'd rather use the banner.
-3. **No nav bar.** The page is short enough on mobile that a sticky nav adds noise without adding value. Hero → about → links → CTA → businesses → footer scrolls cleanly in one pass.
+3. **Sticky cream header nav** with two links — *Home* and *Field Notes* (→ `/blog/`). It sits translucent over the navy CTA section at the top of the home page (backdrop-filter blur). Page flow on the home page: nav → CTA-hero (logo + "Book a free intro call") → Follow along → Businesses → footer.
 4. **Footer disclaimer is intentionally short** — one line. The spec asked for "understated."
 5. **Bronze (`#a08456`) is used only for accents, CTAs, and the bronze-on-navy CTA section.** Body text stays navy on cream — bronze on cream doesn't have enough contrast for body copy (per the spec).
 6. **Fonts via Google Fonts CDN.** Zero local font files to manage. If you ever need to go fully self-hosted (no third-party calls), download the WOFF2s and switch the `@font-face` declarations — but for a personal site this CDN dependency is fine.
