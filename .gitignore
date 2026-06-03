@@ -1,0 +1,19 @@
+# Local tooling / editor state
+.claude/
+.vscode/
+.idea/
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node (in case anyone ever adds a build tool later)
+node_modules/
+dist/
+.cache/
+
+# Logs / env
+*.log
+.env
+.env.local
