@@ -65,36 +65,28 @@ That's it. No SSR, no CI/CD, no Node runtime needed on the server.
 
 ---
 
-## HTTPS / SSL — free, the IONOS way
+## HTTPS / SSL — Cloudflare in front of IONOS
 
-**Short version:** On IONOS *managed web hosting* you don't install Let's Encrypt yourself. There's no shell, so you can't run `certbot`. Instead, IONOS bundles a **free SSL certificate** with the hosting plan (their free tier is Let's Encrypt-issued under the hood) — you just turn it on in the control panel. Same outcome: free, auto-renewing HTTPS. The `.htaccess` in this repo is what *forces* every visitor onto that HTTPS once the cert is active.
+This site uses **Cloudflare in front of IONOS** for HTTPS. Cloudflare terminates TLS at its edge (free Universal SSL — automatically issued, Let's Encrypt-backed, auto-renewed) and proxies plain HTTP back to the IONOS origin. The IONOS-bundled free SSL cert is **not** used here — that one slot was already assigned to another domain on the same hosting plan.
 
-### Step 1 — Turn on the free certificate (one time, ~2 min in the panel)
+### Setup (one-time)
 
-1. Log into IONOS → **Hosting** (or **Websites & Stores**) → the **derekoncapital.com** package.
-2. Open **SSL Certificates** (sometimes under *Security* or *Manage SSL*).
-3. Find the free **SSL Starter** certificate and **assign it to derekoncapital.com** (and `www.derekoncapital.com`). If one isn't already created, click **Create / Activate** — it's free with the plan.
-4. Wait for status to go **Active** (a few minutes up to a couple of hours while DNS validates). IONOS auto-renews it; you never touch it again.
+1. **Add `derekoncapital.com` to Cloudflare** (free plan). It auto-imports the existing DNS records from IONOS.
+2. **Change the nameservers at IONOS** (Domains & SSL → derekoncapital.com → Nameservers) to the two Cloudflare gave you. Wait for Cloudflare's status to flip to **Active** (usually within an hour, occasionally up to a day).
+3. **Cloudflare → SSL/TLS → Overview → Encryption mode = Flexible.** The IONOS origin has no cert, so Flexible is the only mode that works here.
+4. **Cloudflare → SSL/TLS → Edge Certificates → Always Use HTTPS = ON.** This is what redirects `http://` → `https://`. The `.htaccess` intentionally does *not* do that redirect — origin-side redirects loop forever behind Cloudflare-Flexible (because Cloudflare forwards plain HTTP to origin even when the visitor is on HTTPS).
+5. The `.htaccess` keeps a `www → apex` redirect as defense-in-depth. Optional polish: add a Cloudflare **Redirect Rule** (`http.host eq "www.derekoncapital.com" → https://derekoncapital.com/$1`) so the www→apex happens at the edge instead of round-tripping to IONOS.
 
-> If you don't see a free option and IONOS tries to *sell* you one: the free cert is real, but it's sometimes buried. It only appears for domains pointed at this hosting package. Make sure derekoncapital.com's DNS is on this IONOS package first. If it's genuinely missing, IONOS support can switch on the free "SSL Starter."
+### About end-to-end encryption
 
-### Step 2 — Force HTTPS (already handled by `.htaccess`)
+The Cloudflare ↔ IONOS hop is plain HTTP. For a static personal site with no logins, forms, or PII, that's acceptable — every visitor and crawler sees HTTPS end-to-end. If we ever need full encryption to the origin, the move is to migrate hosting to **Cloudflare Pages / Netlify / Vercel** (built-in TLS, push-to-deploy from this GitHub repo), since IONOS Web Hosting has no shell and no custom-cert upload on this tier.
 
-Once the cert is Active, the included `.htaccess` does the rest:
-- Redirects `http://` → `https://` (301).
-- Redirects `www.derekoncapital.com` → `derekoncapital.com` (one canonical host — better for SEO).
-- Sends an **HSTS** header so browsers refuse plain HTTP for a year.
-- Adds a few sensible security headers + gzip + caching.
+### Verify
 
-It's written for IONOS specifically: IONOS terminates SSL at its load balancer, so the redirect checks the `X-Forwarded-Proto` header (not just `%{HTTPS}`) to avoid an infinite redirect loop. Don't "simplify" that rule.
-
-### Step 3 — Verify
-
-- Visit `http://derekoncapital.com` → it should bounce to `https://derekoncapital.com`.
-- Click the padlock in the browser → certificate should be valid.
-- Optional: run the domain through https://www.ssllabs.com/ssltest/ for an A rating.
-
-> **If you're NOT on managed hosting** (e.g. an IONOS VPS / Cloud Server with SSH): then you *can* run Let's Encrypt directly. Install certbot and run `sudo certbot --apache -d derekoncapital.com -d www.derekoncapital.com` (or `--nginx`). It auto-edits your vhost and sets up renewal. But for this static site on standard hosting, Step 1 above is the path.
+- `http://derekoncapital.com` → 301 → `https://derekoncapital.com`. Padlock valid; issuer is one of Cloudflare's auto-rotating edge certs (e.g. "Google Trust Services" or "Let's Encrypt", depending on which Cloudflare currently has provisioned).
+- `http://www.derekoncapital.com` → 301 → `https://derekoncapital.com`.
+- `https://derekoncapital.com/blog/` loads with padlock, no mixed-content warnings.
+- Optional A-rating check: https://www.ssllabs.com/ssltest/.
 
 ---
 
